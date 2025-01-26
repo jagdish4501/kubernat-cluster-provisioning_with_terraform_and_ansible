@@ -19,7 +19,10 @@ variable "private_subnet_azs" {
 variable "enable_nat_gateway" {
   type = bool
 }
-variable "instance_type" {
+variable "instance_type_master_node" {
+  type    = string
+}
+variable "instance_type_worker_node" {
   type    = string
 }
 variable "ec2_ami" {

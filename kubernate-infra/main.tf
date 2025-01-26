@@ -31,7 +31,7 @@ resource "aws_key_pair" "jagdish" {
 module "public_instance" {
   source              = "../aws-tf-modules/aws_ec2"
   for_each            = toset(["public-ec2-instance"])
-  instance_type       = var.instance_type
+  instance_type       = var.instance_type_master_node
   ami                 = var.ec2_ami
   subnet_id           = module.kubernate_vpc.public_subnet_ids[0]
   security_group_ids  = [module.ec2_master_node_sg.sg_id]
@@ -47,7 +47,7 @@ module "private_instances" {
   source              = "../aws-tf-modules/aws_ec2"
   for_each            = toset(["private-ec2-instance-1", "private-ec2-instance-2"])
   ami                 = var.ec2_ami
-  instance_type       = var.instance_type
+  instance_type       = var.instance_type_worker_node
   subnet_id           = module.kubernate_vpc.private_subnet_ids[0]
   security_group_ids  = [module.ec2_worker_node_sg.sg_id]
   associate_public_ip = false
