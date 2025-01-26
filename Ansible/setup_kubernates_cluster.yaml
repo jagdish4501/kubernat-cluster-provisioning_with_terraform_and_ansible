@@ -1,0 +1,139 @@
+---
+- name: Kubernetes Cluster Setup with containerd
+  hosts: all
+  become: yes
+  tasks:
+    - name: Disable swap (to meet Kubernetes requirement)
+      command: swapoff -a
+      ignore_errors: yes
+
+    - name: Disable swap permanently
+      lineinfile:
+        path: /etc/fstab
+        regexp: "^.*swap.*$"
+        line: "# Swap entry"
+      notify:
+        - Reboot system
+
+    - name: Install necessary packages for Kubernetes and containerd
+      apt:
+        name:
+          - apt-transport-https
+          - curl
+          - wget
+          - sudo
+        state: present
+        update_cache: yes
+
+    - name: Add Kubernetes APT repository key
+      apt_key:
+        url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+        state: present
+
+    - name: Add Kubernetes APT repository
+      apt_repository:
+        repo: "deb https://apt.kubernetes.io/ kubernetes-xenial main"
+        state: present
+
+    - name: Install Kubernetes components (kubelet, kubeadm, kubectl)
+      apt:
+        name:
+          - kubelet
+          - kubeadm
+          - kubectl
+        state: present
+        update_cache: yes
+
+    - name: Hold Kubernetes packages at the current version
+      apt:
+        name:
+          - kubelet
+          - kubeadm
+          - kubectl
+        state: held
+
+    - name: Install containerd
+      apt:
+        name: containerd
+        state: present
+        update_cache: yes
+
+    - name: Start and enable containerd
+      service:
+        name: containerd
+        state: started
+        enabled: yes
+
+    - name: Create the containerd configuration file
+      command: containerd config default > /etc/containerd/config.toml
+
+    - name: Restart containerd to apply configuration
+      service:
+        name: containerd
+        state: restarted
+
+    - name: Enable br_netfilter module (required for Kubernetes)
+      modprobe:
+        name: br_netfilter
+        state: present
+
+    - name: Set sysctl settings for Kubernetes networking
+      sysctl:
+        name: "{{ item.name }}"
+        value: "{{ item.value }}"
+        state: present
+        reload: yes
+      loop:
+        - { name: "net.ipv4.ip_forward", value: "1" }
+        - { name: "net.bridge.bridge-nf-call-iptables", value: "1" }
+        - { name: "net.bridge.bridge-nf-call-ip6tables", value: "1" }
+
+  handlers:
+    - name: Reboot system
+      reboot:
+        reboot_timeout: 600
+        test_command: whoami
+        pre_reboot_delay: 0
+        post_reboot_delay: 60
+
+- name: Initialize Kubernetes Master Node
+  hosts: master
+  become: yes
+  tasks:
+    - name: Initialize the Kubernetes master
+      command: kubeadm init --pod-network-cidr=10.244.0.0/16 --cri-socket /var/run/containerd/containerd.sock
+      register: kubeadm_init_output
+      ignore_errors: yes
+
+    - name: Save kubeadm join command for worker nodes
+      debug:
+        msg: "{{ kubeadm_init_output.stdout_lines | select('match', 'kubeadm join') | list }}"
+
+    - name: Set up kubectl for the master user
+      copy:
+        src: /etc/kubernetes/admin.conf
+        dest: "~/.kube/config"
+        remote_src: yes
+        owner: "{{ ansible_user }}"
+        mode: "0644"
+
+    - name: Install Flannel CNI plugin
+      shell: |
+        kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
+      become: yes
+
+- name: Join Kubernetes Worker Nodes
+  hosts: worker
+  become: yes
+  tasks:
+    - name: Join worker nodes to the Kubernetes cluster
+      command: "{{ hostvars['master']['kubeadm_init_output'].stdout_lines | select('match', 'kubeadm join') | list | first }}"
+      when: kubeadm_init_output is defined
+
+    - name: Set up kubectl for the worker user
+      copy:
+        src: /etc/kubernetes/kubelet.conf
+        dest: "~/.kube/config"
+        remote_src: yes
+        owner: "{{ ansible_user }}"
+        mode: "0644"
