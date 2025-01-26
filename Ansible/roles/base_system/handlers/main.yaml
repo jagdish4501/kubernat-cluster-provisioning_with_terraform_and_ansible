@@ -1,0 +1,13 @@
+---
+- name: Reboot system
+  reboot:
+    reboot_timeout: 600 # Maximum time to wait for reboot (in seconds)
+    test_command: whoami # Command to check if the system is back online after reboot
+    connect_timeout: 5 # Timeout for establishing an SSH connection (in seconds)
+    pre_reboot_delay: 10 # Delay before starting the reboot (in seconds)
+    post_reboot_delay: 30 # Delay after reboot before checking if the system is online (in seconds)
+    reboot_minimal: yes # If set to 'yes', attempts to minimize downtime during reboot
+    shutdown_timeout: 300 # Time to wait for shutdown (in seconds)
+    async: 3600 # Timeout for asynchronous task execution, allows reboot command to run in the background
+    poll: 0 # This works in combination with async; set to '0' for no polling (runs asynchronously)
+    boot_command: "/sbin/shutdown -r now" # Command to initiate the reboot (default is typically fine)

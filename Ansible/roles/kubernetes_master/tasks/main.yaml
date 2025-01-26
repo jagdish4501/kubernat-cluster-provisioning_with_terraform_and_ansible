@@ -1,0 +1,85 @@
+---
+- name: Check if Kubernetes is initialized (by checking for the kubeadm config file)
+  stat:
+    path: /etc/kubernetes/admin.conf
+  register: kubeadm_status
+  ignore_errors: true
+
+- name: Check if Kubernetes is running (via kubectl get nodes)
+  command: kubectl get nodes
+  register: kubectl_status
+  failed_when: false
+  changed_when: false
+  ignore_errors: true
+
+- name: Stop kubelet before resetting
+  service:
+    name: kubelet
+    state: stopped
+  when: kubeadm_status.stat.exists == true or kubectl_status.rc != 0
+
+- name: Reset Kubernetes if not initialized or running correctly
+  command: kubeadm reset -f
+  when: kubeadm_status.stat.exists == true or kubectl_status.rc != 0
+  ignore_errors: true
+
+- name: Remove existing Kubernetes manifests (if any)
+  file:
+    path: "{{ item }}"
+    state: absent
+  with_items:
+    - /etc/kubernetes/manifests/kube-apiserver.yaml
+    - /etc/kubernetes/manifests/kube-controller-manager.yaml
+    - /etc/kubernetes/manifests/kube-scheduler.yaml
+    - /etc/kubernetes/manifests/etcd.yaml
+  when: kubeadm_status.stat.exists == true or kubectl_status.rc != 0
+
+- name: Initialize Kubernetes master node if not initialized
+  command: "kubeadm init --pod-network-cidr=192.168.0.0/16 --apiserver-advertise-address={{apiserver_advertise_address}} --node-name master --ignore-preflight-errors=Port-10259,Port-10257,FileAvailable--etc-kubernetes-manifests-kube-apiserver.yaml,FileAvailable--etc-kubernetes-manifests-kube-controller-manager.yaml,FileAvailable--etc-kubernetes-manifests-kube-scheduler.yaml,FileAvailable--etc-kubernetes-manifests-etcd.yaml,Port-10250"
+  when: kubeadm_status.stat.exists == false or kubectl_status.rc != 0
+  register: kubeadm_init_output
+
+- name: Ensure Kubernetes is running
+  systemd:
+    name: kubelet
+    state: started
+    enabled: yes
+
+- name: Display kubeadm init output
+  debug:
+    var: kubeadm_init_output
+  when: kubeadm_init_output is defined
+
+- name: "Ensure the /home/{{ kubernate_user }}/.kube/config directory exists"
+  file:
+    path: "/home/{{ kubernate_user }}/.kube/config"
+    state: directory
+    mode: "0700"
+  become_user: "{{kubernate_user}}"
+
+- name: Set up kubectl for the master user
+  copy:
+    src: /etc/kubernetes/admin.conf
+    dest: "/home/{{ kubernate_user }}/.kube/config"
+    remote_src: yes
+    owner: "{{ kubernate_user }}"
+    mode: "0644"
+
+- name: Install Flannel CNI plugin
+  shell: |
+    kubectl apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
+  when: kubeadm_status.stat.exists == true and kubectl_status.rc == 0
+
+- name: Retry Kubelet check for control plane readiness (up to 5 times)
+  command: systemctl status kubelet
+  register: kubelet_status
+  retries: 5
+  delay: 10
+  until: kubelet_status.rc == 0
+  when: kubeadm_status.stat.exists == true and kubectl_status.rc == 0
+  failed_when: false
+
+- name: Display the status of the Kubelet service
+  debug:
+    var: kubelet_status
+  when: kubelet_status is defined

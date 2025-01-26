@@ -1,0 +1,19 @@
+---
+- name: Join worker node to the Kubernetes cluster
+  command: "{{ hostvars['master']['kubeadm_init_output'].stdout_lines | select('match', 'kubeadm join') | list | first }}"
+  when: kubeadm_init_output is defined
+
+- name: "Ensure the /home/{{ kubernate_user }}/.kube/config directory exists"
+  file:
+    path: "/home/{{ kubernate_user }}/.kube/config"
+    state: directory
+    mode: "0700"
+  become_user: "{{kubernate_user}}"
+
+- name: Set up kubectl for the worker user
+  copy:
+    src: /etc/kubernetes/kubelet.conf
+    dest: "/home/{{ kubernate_user }}/.kube/config"
+    remote_src: yes
+    owner: "{{ kubernate_user }}"
+    mode: "0644"

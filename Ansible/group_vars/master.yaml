@@ -1,0 +1,3 @@
+# grop variables
+kubernate_user: "ubuntu"
+apiserver_advertise_address: "14.0.1.205"

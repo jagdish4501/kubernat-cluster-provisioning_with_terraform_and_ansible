@@ -1,0 +1,59 @@
+---
+- name: Download the Kubernetes GPG key and store in keyring
+  get_url:
+    url: https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key
+    dest: /tmp/kubernetes-Release.key
+    mode: "0644"
+
+- name: Convert the Kubernetes GPG key to keyring format
+  command:
+    cmd: gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg /tmp/kubernetes-Release.key
+    creates: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+- name: Add Kubernetes APT repository to the sources list
+  ansible.builtin.copy:
+    content: |
+      deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /
+    dest: /etc/apt/sources.list.d/kubernetes.list
+    mode: "0644"
+
+- name: Update APT repository cache
+  apt:
+    update_cache: yes
+
+- name: Install Kubernetes components (kubelet, kubeadm, kubectl)
+  apt:
+    name:
+      - kubelet=1.29.6-1.1
+      - kubeadm=1.29.6-1.1
+      - kubectl=1.29.6-1.1
+    state: present
+    allow_downgrade: yes
+    allow_change_held_packages: yes
+
+- name: Verify kubeadm version
+  command: kubeadm version
+  register: kubeadm_version
+  changed_when: false
+
+- name: Verify kubelet version
+  command: kubelet --version
+  register: kubelet_version
+  changed_when: false
+
+- name: Verify kubectl version
+  command: kubectl version --client
+  register: kubectl_version
+  changed_when: false
+
+- name: Show kubeadm version
+  debug:
+    msg: "{{ kubeadm_version.stdout }}"
+
+- name: Show kubelet version
+  debug:
+    msg: "{{ kubelet_version.stdout }}"
+
+- name: Show kubectl version
+  debug:
+    msg: "{{ kubectl_version.stdout }}"

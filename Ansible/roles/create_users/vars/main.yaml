@@ -1,9 +1,0 @@
-# List of users to be created
-users:
-  - name: "yabx"
-    password: "ggu^7uh89b"
-    groups:
-      - "sudo"
-    public_key: ""
-
-default_passwd: "xyz##$$1356vhgfrtgctfgfenytgugh8967gvvhvFhfb"
