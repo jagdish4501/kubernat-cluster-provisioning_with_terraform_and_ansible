@@ -7,6 +7,12 @@
 - name: Install containerd binary
   command: tar Cxzvf /usr/local /tmp/containerd-1.7.14-linux-amd64.tar.gz
 
+- name: Ensure the target directory exists
+  file:
+    path: /usr/lib/systemd/system
+    state: directory
+    mode: "0755"
+
 - name: Download and install containerd service file
   get_url:
     url: https://raw.githubusercontent.com/containerd/containerd/main/containerd.service
@@ -16,6 +22,7 @@
   file:
     path: /etc/containerd
     state: directory
+    mode: "0755"
 
 - name: Generate containerd configuration file
   ansible.builtin.shell: containerd config default | tee /etc/containerd/config.toml

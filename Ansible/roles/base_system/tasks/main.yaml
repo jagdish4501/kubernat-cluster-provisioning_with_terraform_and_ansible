@@ -1,7 +1,6 @@
 ---
 - name: Disable swap to meet Kubernetes requirements
   command: swapoff -a
-  ignore_errors: yes
 
 - name: Load required kernel modules for Kubernetes
   copy:
@@ -32,6 +31,14 @@
   loop:
     - br_netfilter
     - overlay
+  register: output-1
 
 - name: Verify sysctl settings for Kubernetes
   command: sysctl net.bridge.bridge-nf-call-iptables net.bridge.bridge-nf-call-ip6tables net.ipv4.ip_forward
+  register: output-2
+
+- name: Debug output for lsmod and sysctl
+  debug:
+    msg: >
+      "lmsode {br_netfilter, overlay}: {{output-1}}"
+      "sysctl settings : {{output-2}}"
